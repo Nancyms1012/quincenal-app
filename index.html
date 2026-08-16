@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#7c3aed">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>QuincenaApp 💰 - Control de Gastos</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💰</text></svg>">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- User Selection Screen -->
+    <div id="user-screen" class="screen active">
+        <div class="user-screen-container">
+            <div class="app-logo">
+                <span class="logo-icon">💰</span>
+                <h1>QuincenaApp</h1>
+                <p class="subtitle">Control de gastos quincenal</p>
+            </div>
+            <div class="user-list" id="user-list">
+                <!-- Users rendered here -->
+            </div>
+            <button class="btn btn-primary btn-lg" id="btn-add-user">
+                <span>＋</span> Nuevo Usuario
+            </button>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div id="modal-add-user" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Nuevo Usuario</h2>
+                <button class="modal-close" id="modal-close-user">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="input-username">Nombre</label>
+                    <input type="text" id="input-username" placeholder="Ej: Nathy ✨" maxlength="30">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-user">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-user">Crear</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Screen -->
+    <div id="app-screen" class="screen">
+        <!-- Top Navigation -->
+        <header class="app-header">
+            <div class="header-left">
+                <button class="btn-icon" id="btn-back-users" title="Cambiar usuario">
+                    ←
+                </button>
+                <h2 id="header-username">Usuario</h2>
+            </div>
+            <div class="header-right">
+                <button class="btn-icon" id="btn-history" title="Historial">
+                    📋
+                </button>
+                <button class="btn-icon" id="btn-export" title="Exportar">
+                    📥
+                </button>
+            </div>
+        </header>
+
+        <!-- Balance Card -->
+        <section class="balance-card">
+            <div class="balance-header">
+                <h3>Quincena Actual</h3>
+                <span class="quincena-label" id="quincena-label">--</span>
+            </div>
+            <div class="balance-grid">
+                <div class="balance-item income">
+                    <span class="balance-label">Ingreso</span>
+                    <span class="balance-amount" id="balance-income">₡0</span>
+                </div>
+                <div class="balance-item spent">
+                    <span class="balance-label">Gastado</span>
+                    <span class="balance-amount" id="balance-spent">₡0</span>
+                </div>
+                <div class="balance-item remaining">
+                    <span class="balance-label">Disponible</span>
+                    <span class="balance-amount" id="balance-remaining">₡0</span>
+                </div>
+            </div>
+            <div class="balance-bar">
+                <div class="balance-bar-fill" id="balance-bar-fill"></div>
+            </div>
+        </section>
+
+        <!-- Quincena Setup (if no active quincena) -->
+        <section class="setup-quincena" id="setup-quincena">
+            <div class="empty-state">
+                <span class="empty-icon">📅</span>
+                <h3>No hay quincena activa</h3>
+                <p>Registra tu ingreso para comenzar</p>
+                <button class="btn btn-primary" id="btn-new-quincena">Nueva Quincena</button>
+            </div>
+        </section>
+
+        <!-- Main Content (when quincena is active) -->
+        <main class="main-content" id="main-content" style="display:none;">
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="debts">🏦 Deudas</button>
+                <button class="tab" data-tab="expenses">🛒 Gastos</button>
+            </div>
+
+            <!-- Debts Tab -->
+            <div class="tab-content active" id="tab-debts">
+                <div class="section-header">
+                    <h3>Deudas Pendientes</h3>
+                    <button class="btn btn-sm btn-primary" id="btn-add-debt">＋ Agregar</button>
+                </div>
+                <div class="debt-list" id="debt-list">
+                    <!-- Debts rendered here -->
+                </div>
+                <div class="empty-state small" id="empty-debts">
+                    <span class="empty-icon">✅</span>
+                    <p>No hay deudas registradas</p>
+                </div>
+            </div>
+
+            <!-- Expenses Tab -->
+            <div class="tab-content" id="tab-expenses">
+                <div class="section-header">
+                    <h3>Gastos Adicionales</h3>
+                    <button class="btn btn-sm btn-primary" id="btn-add-expense">＋ Agregar</button>
+                </div>
+                <div class="expense-list" id="expense-list">
+                    <!-- Expenses rendered here -->
+                </div>
+                <div class="empty-state small" id="empty-expenses">
+                    <span class="empty-icon">🛒</span>
+                    <p>No hay gastos adicionales</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Floating Action: Close Quincena -->
+        <button class="btn-floating" id="btn-close-quincena" style="display:none;" title="Cerrar quincena">
+            ✓ Cerrar Quincena
+        </button>
+    </div>
+
+    <!-- Modal: New Quincena -->
+    <div id="modal-quincena" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Nueva Quincena</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="input-quincena-date">Fecha de la quincena</label>
+                    <input type="date" id="input-quincena-date">
+                </div>
+                <div class="form-group">
+                    <label for="input-quincena-income">Monto de ingreso</label>
+                    <div class="input-prefix">
+                        <span>₡</span>
+                        <input type="number" id="input-quincena-income" placeholder="0" min="0" step="100">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-generic">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-quincena">Comenzar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Debt -->
+    <div id="modal-debt" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-debt-title">Agregar Deuda</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="input-debt-name">Nombre de la deuda</label>
+                    <input type="text" id="input-debt-name" placeholder="Ej: Tarjeta Visa, Préstamo, etc.">
+                </div>
+                <div class="form-group">
+                    <label for="input-debt-total">Monto total adeudado</label>
+                    <div class="input-prefix">
+                        <span>₡</span>
+                        <input type="number" id="input-debt-total" placeholder="0" min="0" step="100">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="input-debt-quincena">Monto a pagar esta quincena</label>
+                    <div class="input-prefix">
+                        <span>₡</span>
+                        <input type="number" id="input-debt-quincena" placeholder="0" min="0" step="100">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-generic">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-debt">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Pay Debt -->
+    <div id="modal-pay" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Registrar Pago</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="pay-info" id="pay-info">
+                    <!-- Debt info shown here -->
+                </div>
+                <div class="form-group">
+                    <label>Tipo de pago</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="pay-type" value="full" checked>
+                            <span>Pago completo</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="pay-type" value="partial">
+                            <span>Pago parcial</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" id="partial-amount-group" style="display:none;">
+                    <label for="input-partial-amount">Monto a pagar</label>
+                    <div class="input-prefix">
+                        <span>₡</span>
+                        <input type="number" id="input-partial-amount" placeholder="0" min="0" step="100">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="input-receipt">Comprobante (opcional)</label>
+                    <div class="file-upload">
+                        <input type="file" id="input-receipt" accept="image/*">
+                        <div class="file-upload-label" id="file-upload-label">
+                            <span>📎</span> Adjuntar imagen del comprobante
+                        </div>
+                        <img id="receipt-preview" class="receipt-preview" style="display:none;">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-generic">Cancelar</button>
+                <button class="btn btn-primary" id="btn-confirm-pay">Confirmar Pago</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Expense -->
+    <div id="modal-expense" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Agregar Gasto</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="input-expense-name">Descripción</label>
+                    <input type="text" id="input-expense-name" placeholder="Ej: Supermercado, Gasolina, etc.">
+                </div>
+                <div class="form-group">
+                    <label for="input-expense-amount">Monto</label>
+                    <div class="input-prefix">
+                        <span>₡</span>
+                        <input type="number" id="input-expense-amount" placeholder="0" min="0" step="100">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-generic">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-expense">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: History -->
+    <div id="modal-history" class="modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>📋 Historial de Quincenas</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="history-list" id="history-list">
+                    <!-- History items rendered here -->
+                </div>
+                <div class="empty-state small" id="empty-history">
+                    <span class="empty-icon">📋</span>
+                    <p>No hay historial todavía</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: History Detail -->
+    <div id="modal-history-detail" class="modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2 id="history-detail-title">Detalle de Quincena</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body" id="history-detail-body">
+                <!-- Detail rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Export -->
+    <div id="modal-export" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📥 Exportar Registros</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Rango de exportación</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="export-range" value="current" checked>
+                            <span>Quincena actual</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="export-range" value="month">
+                            <span>Este mes</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="export-range" value="custom">
+                            <span>Rango personalizado</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="custom-range-group" style="display:none;">
+                    <div class="form-group">
+                        <label for="export-from">Desde</label>
+                        <input type="date" id="export-from">
+                    </div>
+                    <div class="form-group">
+                        <label for="export-to">Hasta</label>
+                        <input type="date" id="export-to">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Formato</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="export-format" value="pdf" checked>
+                            <span>PDF</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="export-format" value="csv">
+                            <span>CSV</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-generic">Cancelar</button>
+                <button class="btn btn-primary" id="btn-do-export">Descargar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: View Receipt -->
+    <div id="modal-receipt" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Comprobante de Pago</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body receipt-view">
+                <img id="receipt-view-img" src="" alt="Comprobante">
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
