@@ -79,6 +79,10 @@ function setupEventListeners() {
     $('#btn-add-expense').addEventListener('click', () => openModal('modal-expense'));
     $('#btn-save-expense').addEventListener('click', saveExpense);
 
+    // Incomes
+    $('#btn-add-income').addEventListener('click', () => openModal('modal-income'));
+    $('#btn-save-income').addEventListener('click', saveIncome);
+
     // Export
     document.querySelectorAll('input[name="export-range"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -187,6 +191,7 @@ function showAppScreen() {
         $('#btn-close-quincena').style.display = 'block';
         renderDebts();
         renderExpenses();
+        renderIncomes();
         updateBalance();
     } else {
         $('#setup-quincena').style.display = 'block';
@@ -215,6 +220,7 @@ function saveQuincena() {
         id: generateId(),
         date: dateVal,
         income: income,
+        additionalIncomes: [],
         debts: [],
         expenses: [],
         payments: [],
@@ -222,14 +228,14 @@ function saveQuincena() {
         createdAt: new Date().toISOString()
     };
 
-    // Copy existing debts with their current balances
+    // Copy existing debts with their current balances (auto-carry forward)
     currentUser.debts.forEach(debt => {
         if (debt.remainingBalance > 0) {
             quincena.debts.push({
                 debtId: debt.id,
                 name: debt.name,
                 totalDebt: debt.remainingBalance,
-                amountThisQuincena: debt.amountPerQuincena,
+                amountThisQuincena: Math.min(debt.amountPerQuincena, debt.remainingBalance),
                 paid: false,
                 paidAmount: 0,
                 receipt: null
@@ -276,7 +282,15 @@ function closeQuincena() {
 function updateBalance() {
     if (!activeQuincena) return;
 
-    const income = activeQuincena.income;
+    const baseIncome = activeQuincena.income;
+    
+    // Calculate additional incomes
+    let totalAdditionalIncome = 0;
+    (activeQuincena.additionalIncomes || []).forEach(inc => {
+        totalAdditionalIncome += inc.amount;
+    });
+    
+    const totalIncome = baseIncome + totalAdditionalIncome;
     
     // Calculate total spent (paid debts + expenses)
     let totalDebtsPaid = 0;
@@ -290,15 +304,15 @@ function updateBalance() {
     });
 
     const totalSpent = totalDebtsPaid + totalExpenses;
-    const remaining = income - totalSpent;
+    const remaining = totalIncome - totalSpent;
 
-    $('#balance-income').textContent = formatMoney(income);
+    $('#balance-income').textContent = formatMoney(totalIncome);
     $('#balance-spent').textContent = formatMoney(totalSpent);
     $('#balance-remaining').textContent = formatMoney(remaining);
     $('#balance-remaining').className = 'balance-amount' + (remaining < 0 ? ' text-danger' : '');
 
     // Update bar
-    const percent = Math.min(100, Math.max(0, (totalSpent / income) * 100));
+    const percent = Math.min(100, Math.max(0, (totalSpent / totalIncome) * 100));
     $('#balance-bar-fill').style.width = percent + '%';
 
     // Visual feedback for negative balance
@@ -308,6 +322,13 @@ function updateBalance() {
     } else {
         balanceCard.classList.remove('negative');
     }
+
+    // Balance detail breakdown
+    let detailHtml = `<span class="balance-detail-tag">💼 Salario: ${formatMoney(baseIncome)}</span>`;
+    if (totalAdditionalIncome > 0) {
+        detailHtml += `<span class="balance-detail-tag">💵 Adicional: +${formatMoney(totalAdditionalIncome)}</span>`;
+    }
+    $('#balance-detail').innerHTML = detailHtml;
 
     // Update quincena label
     const date = new Date(activeQuincena.date + 'T12:00:00');
@@ -427,7 +448,14 @@ function renderDebts() {
     }
 
     empty.style.display = 'none';
-    list.innerHTML = activeQuincena.debts.map(qDebt => {
+    
+    // Sort: unpaid first, paid last
+    const sortedDebts = [...activeQuincena.debts].sort((a, b) => {
+        if (a.paid === b.paid) return 0;
+        return a.paid ? 1 : -1;
+    });
+    
+    list.innerHTML = sortedDebts.map(qDebt => {
         const masterDebt = currentUser.debts.find(d => d.id === qDebt.debtId);
         const remainingBalance = masterDebt ? masterDebt.remainingBalance : qDebt.totalDebt;
         const statusClass = qDebt.paid ? 'paid' : 'pending';
@@ -660,6 +688,95 @@ function renderExpenses() {
     }).join('');
 }
 
+// ===== Additional Incomes =====
+function saveIncome() {
+    const note = $('#input-income-note').value.trim();
+    const amount = parseFloat($('#input-income-amount').value) || 0;
+
+    if (!note) { toast('Ingresa un concepto o nota'); return; }
+    if (amount <= 0) { toast('Ingresa un monto válido'); return; }
+
+    if (!activeQuincena.additionalIncomes) {
+        activeQuincena.additionalIncomes = [];
+    }
+
+    activeQuincena.additionalIncomes.push({
+        id: generateId(),
+        note,
+        amount,
+        date: new Date().toISOString()
+    });
+
+    saveData(appData);
+    renderIncomes();
+    updateBalance();
+    closeModal('modal-income');
+    $('#input-income-note').value = '';
+    $('#input-income-amount').value = '';
+    toast('Ingreso agregado 💵');
+}
+
+function deleteIncome(incomeId) {
+    if (!activeQuincena || !activeQuincena.additionalIncomes) return;
+    activeQuincena.additionalIncomes = activeQuincena.additionalIncomes.filter(i => i.id !== incomeId);
+    saveData(appData);
+    renderIncomes();
+    updateBalance();
+    toast('Ingreso eliminado');
+}
+
+function renderIncomes() {
+    const list = $('#income-list');
+    const empty = $('#empty-incomes');
+
+    if (!activeQuincena) return;
+
+    // Build list including salary as first item
+    let html = `
+        <div class="income-card salary">
+            <div class="income-card-left">
+                <div>
+                    <div class="income-card-name">💼 Salario quincenal</div>
+                    <div class="income-card-note">Ingreso base</div>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;">
+                <span class="income-card-amount">${formatMoney(activeQuincena.income)}</span>
+            </div>
+        </div>
+    `;
+
+    const additionalIncomes = activeQuincena.additionalIncomes || [];
+    
+    if (additionalIncomes.length === 0) {
+        empty.style.display = 'none';
+    } else {
+        empty.style.display = 'none';
+    }
+
+    additionalIncomes.forEach(income => {
+        const date = new Date(income.date);
+        const dateStr = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+        html += `
+            <div class="income-card">
+                <div class="income-card-left">
+                    <div>
+                        <div class="income-card-name">${escapeHtml(income.note)}</div>
+                        <div class="income-card-note">${dateStr}</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;">
+                    <span class="income-card-amount">+${formatMoney(income.amount)}</span>
+                    <button class="income-card-delete" onclick="deleteIncome('${income.id}')" title="Eliminar">✕</button>
+                </div>
+            </div>
+        `;
+    });
+
+    list.innerHTML = html;
+    empty.style.display = 'none';
+}
+
 // ===== Tabs =====
 function switchTab(tabName) {
     $$('.tab').forEach(t => t.classList.remove('active'));
@@ -691,14 +808,16 @@ function renderHistory() {
         
         const totalSpent = q.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0) +
                           q.expenses.reduce((sum, e) => sum + e.amount, 0);
+        const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
+        const totalIncome = q.income + totalAdditional;
 
         return `
             <div class="history-item" onclick="viewHistoryDetail('${q.id}')">
                 <div class="history-item-left">
                     <h4>${dateLabel}</h4>
-                    <p>Ingreso: ${formatMoney(q.income)} | Gastado: ${formatMoney(totalSpent)}</p>
+                    <p>Ingreso: ${formatMoney(totalIncome)} | Gastado: ${formatMoney(totalSpent)}</p>
                 </div>
-                <span class="history-item-amount">${formatMoney(q.income - totalSpent)}</span>
+                <span class="history-item-amount">${formatMoney(totalIncome - totalSpent)}</span>
             </div>
         `;
     }).join('');
@@ -718,13 +837,15 @@ function viewHistoryDetail(quincenaId) {
     const totalDebtsPaid = q.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0);
     const totalExpenses = q.expenses.reduce((sum, e) => sum + e.amount, 0);
     const totalSpent = totalDebtsPaid + totalExpenses;
+    const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
+    const totalIncome = q.income + totalAdditional;
 
     let html = `
         <div class="detail-section">
             <div class="detail-grid">
                 <div class="detail-stat">
-                    <span class="detail-stat-label">Ingreso</span>
-                    <span class="detail-stat-value text-success">${formatMoney(q.income)}</span>
+                    <span class="detail-stat-label">Ingreso Total</span>
+                    <span class="detail-stat-value text-success">${formatMoney(totalIncome)}</span>
                 </div>
                 <div class="detail-stat">
                     <span class="detail-stat-label">Gastado</span>
@@ -732,11 +853,21 @@ function viewHistoryDetail(quincenaId) {
                 </div>
                 <div class="detail-stat">
                     <span class="detail-stat-label">Restante</span>
-                    <span class="detail-stat-value">${formatMoney(q.income - totalSpent)}</span>
+                    <span class="detail-stat-value">${formatMoney(totalIncome - totalSpent)}</span>
                 </div>
             </div>
         </div>
     `;
+
+    // Show income breakdown
+    if (totalAdditional > 0) {
+        html += `<div class="detail-section"><h4>💵 Ingresos</h4>`;
+        html += `<div class="detail-list-item"><span class="name">💼 Salario</span><span class="amount">${formatMoney(q.income)}</span></div>`;
+        (q.additionalIncomes || []).forEach(inc => {
+            html += `<div class="detail-list-item"><span class="name">${escapeHtml(inc.note)}</span><span class="amount text-success">+${formatMoney(inc.amount)}</span></div>`;
+        });
+        html += `</div>`;
+    }
 
     if (q.debts.length > 0) {
         html += `<div class="detail-section"><h4>🏦 Deudas</h4>`;
@@ -829,6 +960,14 @@ function exportCSV(quincenas) {
         const date = new Date(q.date + 'T12:00:00');
         const dateLabel = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
 
+        // Salary
+        csv += `${dateLabel},Ingreso,Salario quincenal,${q.income},${q.income},Base\n`;
+
+        // Additional incomes
+        (q.additionalIncomes || []).forEach(inc => {
+            csv += `${dateLabel},Ingreso,${inc.note},${inc.amount},${inc.amount},Adicional\n`;
+        });
+
         q.debts.forEach(d => {
             csv += `${dateLabel},Deuda,${d.name},${d.amountThisQuincena},${d.paidAmount},${d.paid ? 'Pagado' : 'Pendiente'}\n`;
         });
@@ -882,13 +1021,15 @@ function exportPDF(quincenas) {
         const totalDebtsPaid = q.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0);
         const totalExpenses = q.expenses.reduce((sum, e) => sum + e.amount, 0);
         const totalSpent = totalDebtsPaid + totalExpenses;
+        const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
+        const totalIncome = q.income + totalAdditional;
 
         html += `
             <h2>${label} - ${monthNames[date.getMonth()]} ${date.getFullYear()}</h2>
             <div class="summary">
                 <div class="summary-box">
-                    <div class="summary-label">Ingreso</div>
-                    <div class="summary-value" style="color:#10b981">${formatMoney(q.income)}</div>
+                    <div class="summary-label">Ingreso Total</div>
+                    <div class="summary-value" style="color:#10b981">${formatMoney(totalIncome)}</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-label">Gastado</div>
@@ -896,10 +1037,19 @@ function exportPDF(quincenas) {
                 </div>
                 <div class="summary-box">
                     <div class="summary-label">Disponible</div>
-                    <div class="summary-value">${formatMoney(q.income - totalSpent)}</div>
+                    <div class="summary-value">${formatMoney(totalIncome - totalSpent)}</div>
                 </div>
             </div>
         `;
+
+        if (totalAdditional > 0) {
+            html += `<h3>💵 Detalle de Ingresos</h3><table><tr><th>Concepto</th><th>Monto</th></tr>`;
+            html += `<tr><td>💼 Salario quincenal</td><td>${formatMoney(q.income)}</td></tr>`;
+            (q.additionalIncomes || []).forEach(inc => {
+                html += `<tr><td>${escapeHtml(inc.note)}</td><td>${formatMoney(inc.amount)}</td></tr>`;
+            });
+            html += `<tr class="total-row"><td>Total Ingresos</td><td>${formatMoney(totalIncome)}</td></tr></table>`;
+        }
 
         if (q.debts.length > 0) {
             html += `

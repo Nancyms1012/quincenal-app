@@ -614,6 +614,85 @@ body {
     color: white;
 }
 
+/* ===== Income Cards ===== */
+.income-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.income-card {
+    background: white;
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-left: 4px solid var(--success);
+}
+
+.income-card.salary {
+    border-left-color: var(--primary);
+}
+
+.income-card-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.income-card-name {
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.income-card-note {
+    font-size: 12px;
+    color: var(--gray-500);
+}
+
+.income-card-amount {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--success);
+}
+
+.income-card-delete {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: var(--danger-bg);
+    color: var(--danger);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 8px;
+    transition: var(--transition);
+}
+
+.income-card-delete:hover {
+    background: var(--danger);
+    color: white;
+}
+
+/* ===== Balance Detail ===== */
+.balance-detail {
+    margin-top: 12px;
+    font-size: 11px;
+    opacity: 0.85;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+
+.balance-detail-tag {
+    background: rgba(255,255,255,0.2);
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+
 /* ===== Floating Button ===== */
 .btn-floating {
     position: fixed;

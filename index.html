@@ -77,7 +77,7 @@
             </div>
             <div class="balance-grid">
                 <div class="balance-item income">
-                    <span class="balance-label">Ingreso</span>
+                    <span class="balance-label">Ingreso Total</span>
                     <span class="balance-amount" id="balance-income">₡0</span>
                 </div>
                 <div class="balance-item spent">
@@ -92,6 +92,7 @@
             <div class="balance-bar">
                 <div class="balance-bar-fill" id="balance-bar-fill"></div>
             </div>
+            <div class="balance-detail" id="balance-detail"></div>
         </section>
 
         <!-- Quincena Setup (if no active quincena) -->
@@ -110,6 +111,7 @@
             <div class="tabs">
                 <button class="tab active" data-tab="debts">🏦 Deudas</button>
                 <button class="tab" data-tab="expenses">🛒 Gastos</button>
+                <button class="tab" data-tab="incomes">💵 Ingresos</button>
             </div>
 
             <!-- Debts Tab -->
@@ -139,6 +141,21 @@
                 <div class="empty-state small" id="empty-expenses">
                     <span class="empty-icon">🛒</span>
                     <p>No hay gastos adicionales</p>
+                </div>
+            </div>
+
+            <!-- Incomes Tab -->
+            <div class="tab-content" id="tab-incomes">
+                <div class="section-header">
+                    <h3>Ingresos</h3>
+                    <button class="btn btn-sm btn-primary" id="btn-add-income">＋ Agregar Ingreso</button>
+                </div>
+                <div class="income-list" id="income-list">
+                    <!-- Incomes rendered here -->
+                </div>
+                <div class="empty-state small" id="empty-incomes">
+                    <span class="empty-icon">💵</span>
+                    <p>Solo el salario base registrado</p>
                 </div>
             </div>
         </main>
@@ -370,6 +387,33 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary modal-close-generic">Cancelar</button>
                 <button class="btn btn-primary" id="btn-do-export">Descargar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Income -->
+    <div id="modal-income" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Agregar Ingreso</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="input-income-note">Concepto / Nota</label>
+                    <input type="text" id="input-income-note" placeholder="Ej: Freelance, Venta, Devolución, etc.">
+                </div>
+                <div class="form-group">
+                    <label for="input-income-amount">Monto</label>
+                    <div class="input-prefix">
+                        <span>₡</span>
+                        <input type="number" id="input-income-amount" placeholder="0" min="0" step="100">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-generic">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-income">Agregar</button>
             </div>
         </div>
     </div>
