@@ -159,6 +159,21 @@ body {
     opacity: 1;
 }
 
+/* ===== Backup Section ===== */
+.backup-section {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--gray-200);
+}
+
+.btn-backup {
+    flex: 1;
+    font-size: 12px;
+    padding: 10px 12px;
+}
+
 /* ===== Buttons ===== */
 .btn {
     display: inline-flex;

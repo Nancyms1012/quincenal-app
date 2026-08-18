@@ -47,6 +47,11 @@ function setupEventListeners() {
     $('#modal-close-user').addEventListener('click', () => closeModal('modal-add-user'));
     $('#input-username').addEventListener('keypress', (e) => { if (e.key === 'Enter') saveUser(); });
 
+    // Backup & Restore
+    $('#btn-backup').addEventListener('click', downloadBackup);
+    $('#btn-restore').addEventListener('click', () => $('#input-restore').click());
+    $('#input-restore').addEventListener('change', restoreBackup);
+
     // Navigation
     $('#btn-back-users').addEventListener('click', goBackToUsers);
     $('#btn-history').addEventListener('click', () => { renderHistory(); openModal('modal-history'); });
@@ -277,6 +282,13 @@ function closeQuincena() {
     activeQuincena = null;
     showAppScreen();
     toast('Quincena cerrada ✅');
+
+    // Suggest backup after closing
+    setTimeout(() => {
+        if (confirm('💾 ¿Querés descargar un backup de tus datos?\n\nEs recomendable hacerlo después de cerrar una quincena para no perder información.')) {
+            downloadBackup();
+        }
+    }, 500);
 }
 
 function updateBalance() {
@@ -1184,17 +1196,10 @@ function exportPDF(quincenas) {
 
     html += `</body></html>`;
 
-    // Open in new window for printing
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) {
-        win.onload = () => { win.print(); };
-    } else {
-        // Fallback: download as HTML
-        downloadFile(html, `reporte_${currentUser.name}_${Date.now()}.html`, 'text/html');
-    }
-    toast('Reporte generado 📄');
+    // Download directly as HTML file (user can open and save as PDF)
+    const date = new Date().toISOString().split('T')[0];
+    downloadFile(html, `reporte_${currentUser.name}_${date}.html`, 'text/html');
+    toast('Reporte descargado 📄 (Abrilo para ver o guardar como PDF)');
 }
 
 function downloadFile(content, filename, type) {
@@ -1207,6 +1212,64 @@ function downloadFile(content, filename, type) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+// ===== Backup & Restore =====
+function downloadBackup() {
+    const data = loadData();
+    if (!data.users || data.users.length === 0) {
+        toast('No hay datos para respaldar');
+        return;
+    }
+    
+    const backupData = {
+        ...data,
+        backupDate: new Date().toISOString(),
+        appVersion: '1.0'
+    };
+    
+    const json = JSON.stringify(backupData, null, 2);
+    const date = new Date().toISOString().split('T')[0];
+    downloadFile(json, `quincenal-backup_${date}.json`, 'application/json');
+    toast('Backup descargado 💾');
+}
+
+function restoreBackup(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const data = JSON.parse(event.target.result);
+            
+            // Validate structure
+            if (!data.users || !Array.isArray(data.users)) {
+                toast('❌ Archivo no válido');
+                return;
+            }
+
+            if (!confirm(`¿Restaurar backup? Esto reemplazará todos los datos actuales.\n\nEl backup contiene ${data.users.length} usuario(s).\n${data.backupDate ? 'Fecha: ' + new Date(data.backupDate).toLocaleDateString('es-CR') : ''}`)) {
+                return;
+            }
+
+            // Remove backup metadata before saving
+            delete data.backupDate;
+            delete data.appVersion;
+            
+            saveData(data);
+            appData = data;
+            renderUserList();
+            toast('✅ Datos restaurados exitosamente');
+        } catch (err) {
+            toast('❌ Error al leer el archivo');
+            console.error('Restore error:', err);
+        }
+    };
+    reader.readAsText(file);
+    
+    // Reset input so same file can be selected again
+    e.target.value = '';
 }
 
 // ===== Utility Functions =====
