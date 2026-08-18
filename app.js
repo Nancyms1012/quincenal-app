@@ -292,7 +292,7 @@ function updateBalance() {
     
     const totalIncome = baseIncome + totalAdditionalIncome;
     
-    // Calculate total spent (paid debts + expenses)
+    // Calculate total spent (paid debts + purchased expenses only)
     let totalDebtsPaid = 0;
     activeQuincena.debts.forEach(d => {
         if (d.paid) totalDebtsPaid += d.paidAmount;
@@ -300,7 +300,7 @@ function updateBalance() {
     
     let totalExpenses = 0;
     activeQuincena.expenses.forEach(e => {
-        totalExpenses += e.amount;
+        if (e.purchased) totalExpenses += e.amount;
     });
 
     const totalSpent = totalDebtsPaid + totalExpenses;
@@ -437,6 +437,56 @@ function deleteDebt(debtId) {
     toast('Deuda eliminada');
 }
 
+function renderDebtSummary() {
+    if (!activeQuincena || activeQuincena.debts.length === 0) {
+        $('#debt-summary').style.display = 'none';
+        return;
+    }
+
+    const summaryEl = $('#debt-summary');
+    summaryEl.style.display = 'block';
+
+    // Calculate totals
+    const totalThisQuincena = activeQuincena.debts.reduce((sum, d) => sum + d.amountThisQuincena, 0);
+    const totalPaid = activeQuincena.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0);
+    const totalRemaining = totalThisQuincena - totalPaid;
+
+    $('#debt-summary-total').textContent = formatMoney(totalThisQuincena);
+    $('#debt-summary-paid').textContent = formatMoney(totalPaid);
+    $('#debt-summary-remaining').textContent = formatMoney(totalRemaining);
+    
+    // Color the remaining based on status
+    const remainingEl = $('#debt-summary-remaining');
+    if (totalRemaining <= 0) {
+        remainingEl.className = 'debt-summary-value text-success';
+    } else {
+        remainingEl.className = 'debt-summary-value text-danger';
+    }
+
+    // Alert: check if available money covers remaining debts
+    const alertEl = $('#debt-summary-alert');
+    const baseIncome = activeQuincena.income;
+    const totalAdditionalIncome = (activeQuincena.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
+    const totalIncome = baseIncome + totalAdditionalIncome;
+    const totalExpensesPurchased = activeQuincena.expenses.filter(e => e.purchased).reduce((sum, e) => sum + e.amount, 0);
+    const availableAfterExpenses = totalIncome - totalPaid - totalExpensesPurchased;
+
+    if (totalRemaining > 0 && totalRemaining > availableAfterExpenses) {
+        const deficit = totalRemaining - availableAfterExpenses;
+        alertEl.style.display = 'flex';
+        alertEl.className = 'debt-summary-alert warning';
+        alertEl.innerHTML = `⚠️ Te faltan <strong>${formatMoney(deficit)}</strong> para cubrir todas las deudas pendientes`;
+    } else if (totalRemaining <= 0) {
+        alertEl.style.display = 'flex';
+        alertEl.className = 'debt-summary-alert success';
+        alertEl.innerHTML = `✅ ¡Todas las deudas de esta quincena están cubiertas!`;
+    } else {
+        alertEl.style.display = 'flex';
+        alertEl.className = 'debt-summary-alert success';
+        alertEl.innerHTML = `✅ Tenés suficiente para cubrir las deudas pendientes`;
+    }
+}
+
 function renderDebts() {
     const list = $('#debt-list');
     const empty = $('#empty-debts');
@@ -444,10 +494,12 @@ function renderDebts() {
     if (!activeQuincena || activeQuincena.debts.length === 0) {
         list.innerHTML = '';
         empty.style.display = 'block';
+        $('#debt-summary').style.display = 'none';
         return;
     }
 
     empty.style.display = 'none';
+    renderDebtSummary();
     
     // Sort: unpaid first, paid last
     const sortedDebts = [...activeQuincena.debts].sort((a, b) => {
@@ -624,7 +676,7 @@ function undoPay(debtId) {
     toast('Pago deshecho ↩');
 }
 
-// ===== Expenses =====
+// ===== Expenses (Shopping List) =====
 function saveExpense() {
     const name = $('#input-expense-name').value.trim();
     const amount = parseFloat($('#input-expense-amount').value) || 0;
@@ -636,6 +688,7 @@ function saveExpense() {
         id: generateId(),
         name,
         amount,
+        purchased: false,
         date: new Date().toISOString()
     });
 
@@ -645,7 +698,22 @@ function saveExpense() {
     closeModal('modal-expense');
     $('#input-expense-name').value = '';
     $('#input-expense-amount').value = '';
-    toast('Gasto agregado');
+    toast('Agregado a la lista 🛒');
+}
+
+function toggleExpensePurchased(expenseId) {
+    if (!activeQuincena) return;
+    const expense = activeQuincena.expenses.find(e => e.id === expenseId);
+    if (!expense) return;
+    expense.purchased = !expense.purchased;
+    if (expense.purchased) {
+        expense.purchasedAt = new Date().toISOString();
+    } else {
+        expense.purchasedAt = null;
+    }
+    saveData(appData);
+    renderExpenses();
+    updateBalance();
 }
 
 function deleteExpense(expenseId) {
@@ -654,33 +722,53 @@ function deleteExpense(expenseId) {
     saveData(appData);
     renderExpenses();
     updateBalance();
-    toast('Gasto eliminado');
+    toast('Eliminado de la lista');
 }
 
 function renderExpenses() {
     const list = $('#expense-list');
     const empty = $('#empty-expenses');
+    const summary = $('#expense-summary');
 
     if (!activeQuincena || activeQuincena.expenses.length === 0) {
         list.innerHTML = '';
         empty.style.display = 'block';
+        summary.style.display = 'none';
         return;
     }
 
     empty.style.display = 'none';
-    list.innerHTML = activeQuincena.expenses.map(expense => {
+    
+    // Calculate summary
+    const totalItems = activeQuincena.expenses.length;
+    const purchasedItems = activeQuincena.expenses.filter(e => e.purchased);
+    const totalPlanned = activeQuincena.expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalPurchased = purchasedItems.reduce((sum, e) => sum + e.amount, 0);
+    
+    summary.style.display = 'block';
+    $('#expense-summary-text').textContent = `${purchasedItems.length}/${totalItems} comprado${purchasedItems.length !== 1 ? 's' : ''} — Planificado: ${formatMoney(totalPlanned)} | Gastado: ${formatMoney(totalPurchased)}`;
+
+    // Sort: unchecked first, checked last
+    const sorted = [...activeQuincena.expenses].sort((a, b) => {
+        if (a.purchased === b.purchased) return 0;
+        return a.purchased ? 1 : -1;
+    });
+
+    list.innerHTML = sorted.map(expense => {
         const date = new Date(expense.date);
         const dateStr = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+        const isChecked = expense.purchased ? 'checked' : '';
         return `
-            <div class="expense-card">
+            <div class="expense-card ${expense.purchased ? 'purchased' : ''}">
                 <div class="expense-card-left">
+                    <input type="checkbox" class="expense-checkbox" ${isChecked} onchange="toggleExpensePurchased('${expense.id}')">
                     <div>
-                        <div class="expense-card-name">${escapeHtml(expense.name)}</div>
+                        <div class="expense-card-name ${expense.purchased ? 'checked' : ''}">${escapeHtml(expense.name)}</div>
                         <div class="expense-card-date">${dateStr}</div>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;">
-                    <span class="expense-card-amount">-${formatMoney(expense.amount)}</span>
+                    <span class="expense-card-amount ${expense.purchased ? 'checked' : ''}">${expense.purchased ? '-' : ''}${formatMoney(expense.amount)}</span>
                     <button class="expense-card-delete" onclick="deleteExpense('${expense.id}')" title="Eliminar">✕</button>
                 </div>
             </div>
@@ -807,7 +895,7 @@ function renderHistory() {
         const dateLabel = `${label} - ${monthNames[date.getMonth()]} ${date.getFullYear()}`;
         
         const totalSpent = q.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0) +
-                          q.expenses.reduce((sum, e) => sum + e.amount, 0);
+                          q.expenses.filter(e => e.purchased !== false).reduce((sum, e) => sum + e.amount, 0);
         const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
         const totalIncome = q.income + totalAdditional;
 
@@ -835,7 +923,7 @@ function viewHistoryDetail(quincenaId) {
     $('#history-detail-title').textContent = `${label} - ${monthNames[date.getMonth()]} ${date.getFullYear()}`;
 
     const totalDebtsPaid = q.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0);
-    const totalExpenses = q.expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses = q.expenses.filter(e => e.purchased !== false).reduce((sum, e) => sum + e.amount, 0);
     const totalSpent = totalDebtsPaid + totalExpenses;
     const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
     const totalIncome = q.income + totalAdditional;
@@ -887,12 +975,14 @@ function viewHistoryDetail(quincenaId) {
     }
 
     if (q.expenses.length > 0) {
-        html += `<div class="detail-section"><h4>🛒 Gastos Adicionales</h4>`;
+        html += `<div class="detail-section"><h4>🛒 Compras</h4>`;
         q.expenses.forEach(e => {
+            const purchased = e.purchased !== false;
+            const emoji = purchased ? '✅' : '⏳';
             html += `
                 <div class="detail-list-item">
-                    <span class="name">${escapeHtml(e.name)}</span>
-                    <span class="amount text-danger">-${formatMoney(e.amount)}</span>
+                    <span class="name">${emoji} ${escapeHtml(e.name)}</span>
+                    <span class="amount ${purchased ? 'text-danger' : ''}">${purchased ? '-' : ''}${formatMoney(e.amount)}</span>
                 </div>
             `;
         });
@@ -973,7 +1063,8 @@ function exportCSV(quincenas) {
         });
 
         q.expenses.forEach(e => {
-            csv += `${dateLabel},Gasto,${e.name},${e.amount},${e.amount},Registrado\n`;
+            const purchased = e.purchased !== false;
+            csv += `${dateLabel},Compra,${e.name},${e.amount},${purchased ? e.amount : 0},${purchased ? 'Comprado' : 'Pendiente'}\n`;
         });
     });
 
@@ -1019,7 +1110,7 @@ function exportPDF(quincenas) {
         const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
         const totalDebtsPaid = q.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0);
-        const totalExpenses = q.expenses.reduce((sum, e) => sum + e.amount, 0);
+        const totalExpenses = q.expenses.filter(e => e.purchased !== false).reduce((sum, e) => sum + e.amount, 0);
         const totalSpent = totalDebtsPaid + totalExpenses;
         const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
         const totalIncome = q.income + totalAdditional;
@@ -1073,19 +1164,21 @@ function exportPDF(quincenas) {
 
         if (q.expenses.length > 0) {
             html += `
-                <h3>🛒 Gastos Adicionales</h3>
+                <h3>🛒 Compras</h3>
                 <table>
-                    <tr><th>Descripción</th><th>Monto</th><th>Fecha</th></tr>
+                    <tr><th>Descripción</th><th>Monto</th><th>Estado</th><th>Fecha</th></tr>
             `;
             q.expenses.forEach(e => {
                 const eDate = new Date(e.date);
+                const purchased = e.purchased !== false;
                 html += `<tr>
                     <td>${escapeHtml(e.name)}</td>
                     <td>${formatMoney(e.amount)}</td>
+                    <td class="${purchased ? 'paid' : 'pending'}">${purchased ? '✅ Comprado' : '⏳ Pendiente'}</td>
                     <td>${eDate.toLocaleDateString('es-CR')}</td>
                 </tr>`;
             });
-            html += `<tr class="total-row"><td>Total Gastos</td><td>${formatMoney(totalExpenses)}</td><td></td></tr></table>`;
+            html += `<tr class="total-row"><td>Total Comprado</td><td>${formatMoney(totalExpenses)}</td><td></td><td></td></tr></table>`;
         }
     });
 

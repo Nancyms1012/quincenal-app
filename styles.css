@@ -405,6 +405,79 @@ body {
     display: block;
 }
 
+/* ===== Debt Summary Panel ===== */
+.debt-summary {
+    background: white;
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--gray-200);
+}
+
+.debt-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.debt-summary-item {
+    text-align: center;
+}
+
+.debt-summary-label {
+    display: block;
+    font-size: 11px;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+}
+
+.debt-summary-value {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.debt-summary-alert {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.debt-summary-alert.warning {
+    background: var(--warning-bg);
+    color: #92400e;
+    border: 1px solid #fbbf24;
+}
+
+.debt-summary-alert.success {
+    background: var(--success-bg);
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+}
+
+/* ===== Expense/Shopping Summary ===== */
+.expense-summary {
+    background: var(--primary-bg);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--primary-light);
+}
+
+.expense-summary-text {
+    font-size: 13px;
+    color: var(--primary-dark);
+    font-weight: 500;
+}
+
 /* ===== Section Header ===== */
 .section-header {
     display: flex;
@@ -562,7 +635,7 @@ body {
     color: white;
 }
 
-/* ===== Expense Cards ===== */
+/* ===== Expense Cards (Shopping List) ===== */
 .expense-card {
     background: white;
     border-radius: var(--radius);
@@ -572,6 +645,12 @@ body {
     align-items: center;
     justify-content: space-between;
     border-left: 4px solid var(--warning);
+    transition: var(--transition);
+}
+
+.expense-card.purchased {
+    border-left-color: var(--success);
+    opacity: 0.75;
 }
 
 .expense-card-left {
@@ -580,9 +659,23 @@ body {
     gap: 12px;
 }
 
+.expense-checkbox {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    accent-color: var(--success);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 .expense-card-name {
     font-weight: 500;
     font-size: 14px;
+}
+
+.expense-card-name.checked {
+    text-decoration: line-through;
+    color: var(--gray-400);
 }
 
 .expense-card-date {
@@ -593,6 +686,10 @@ body {
 .expense-card-amount {
     font-weight: 700;
     font-size: 15px;
+    color: var(--gray-700);
+}
+
+.expense-card-amount.checked {
     color: var(--danger);
 }
 
@@ -1113,6 +1210,18 @@ body {
     
     .modal-content {
         margin: 10px;
+    }
+    
+    .debt-summary-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .debt-summary-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: left;
     }
 }
 

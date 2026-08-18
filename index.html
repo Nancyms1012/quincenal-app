@@ -110,12 +110,33 @@
             <!-- Tabs -->
             <div class="tabs">
                 <button class="tab active" data-tab="debts">🏦 Deudas</button>
-                <button class="tab" data-tab="expenses">🛒 Gastos</button>
+                <button class="tab" data-tab="expenses">🛒 Compras</button>
                 <button class="tab" data-tab="incomes">💵 Ingresos</button>
             </div>
 
             <!-- Debts Tab -->
             <div class="tab-content active" id="tab-debts">
+                <!-- Debt Summary Panel -->
+                <div class="debt-summary" id="debt-summary" style="display:none;">
+                    <div class="debt-summary-grid">
+                        <div class="debt-summary-item">
+                            <span class="debt-summary-label">Total esta quincena</span>
+                            <span class="debt-summary-value" id="debt-summary-total">₡0</span>
+                        </div>
+                        <div class="debt-summary-item">
+                            <span class="debt-summary-label">Ya pagado</span>
+                            <span class="debt-summary-value text-success" id="debt-summary-paid">₡0</span>
+                        </div>
+                        <div class="debt-summary-item">
+                            <span class="debt-summary-label">Faltante</span>
+                            <span class="debt-summary-value" id="debt-summary-remaining">₡0</span>
+                        </div>
+                    </div>
+                    <div class="debt-summary-alert" id="debt-summary-alert" style="display:none;">
+                        <!-- Alert shown when money doesn't cover debts -->
+                    </div>
+                </div>
+
                 <div class="section-header">
                     <h3>Deudas Pendientes</h3>
                     <button class="btn btn-sm btn-primary" id="btn-add-debt">＋ Agregar</button>
@@ -129,18 +150,21 @@
                 </div>
             </div>
 
-            <!-- Expenses Tab -->
+            <!-- Expenses Tab (Shopping List) -->
             <div class="tab-content" id="tab-expenses">
                 <div class="section-header">
-                    <h3>Gastos Adicionales</h3>
+                    <h3>Lista de Compras</h3>
                     <button class="btn btn-sm btn-primary" id="btn-add-expense">＋ Agregar</button>
+                </div>
+                <div class="expense-summary" id="expense-summary" style="display:none;">
+                    <span class="expense-summary-text" id="expense-summary-text"></span>
                 </div>
                 <div class="expense-list" id="expense-list">
                     <!-- Expenses rendered here -->
                 </div>
                 <div class="empty-state small" id="empty-expenses">
                     <span class="empty-icon">🛒</span>
-                    <p>No hay gastos adicionales</p>
+                    <p>No hay compras en la lista</p>
                 </div>
             </div>
 
@@ -280,16 +304,16 @@
     <div id="modal-expense" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Agregar Gasto</h2>
+                <h2>Agregar a Lista de Compras</h2>
                 <button class="modal-close modal-close-generic">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label for="input-expense-name">Descripción</label>
-                    <input type="text" id="input-expense-name" placeholder="Ej: Supermercado, Gasolina, etc.">
+                    <label for="input-expense-name">¿Qué querés comprar?</label>
+                    <input type="text" id="input-expense-name" placeholder="Ej: Supermercado, Gasolina, Zapatos, etc.">
                 </div>
                 <div class="form-group">
-                    <label for="input-expense-amount">Monto</label>
+                    <label for="input-expense-amount">Monto estimado</label>
                     <div class="input-prefix">
                         <span>₡</span>
                         <input type="number" id="input-expense-amount" placeholder="0" min="0" step="100">
@@ -298,7 +322,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary modal-close-generic">Cancelar</button>
-                <button class="btn btn-primary" id="btn-save-expense">Guardar</button>
+                <button class="btn btn-primary" id="btn-save-expense">Agregar</button>
             </div>
         </div>
     </div>
