@@ -1196,10 +1196,40 @@ function exportPDF(quincenas) {
 
     html += `</body></html>`;
 
-    // Download directly as HTML file (user can open and save as PDF)
-    const date = new Date().toISOString().split('T')[0];
-    downloadFile(html, `reporte_${currentUser.name}_${date}.html`, 'text/html');
-    toast('Reporte descargado 📄 (Abrilo para ver o guardar como PDF)');
+    // Open report in a new tab (works on iOS Safari without triggering print)
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    // On iOS, window.open works better than download links
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    if (isIOS) {
+        // For iOS: open in same tab (new tabs are blocked by Safari)
+        // Create a full-screen overlay with the report and a close button
+        const overlay = document.createElement('div');
+        overlay.id = 'report-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:white;overflow-y:auto;';
+        overlay.innerHTML = `
+            <div style="position:sticky;top:0;background:#7c3aed;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:1;">
+                <span style="color:white;font-weight:600;font-size:14px;">📄 Reporte generado</span>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="shareReport()" style="background:white;color:#7c3aed;border:none;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">📤 Compartir</button>
+                    <button onclick="document.getElementById('report-overlay').remove()" style="background:rgba(255,255,255,0.2);color:white;border:none;padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">✕ Cerrar</button>
+                </div>
+            </div>
+            <iframe srcdoc='${html.replace(/'/g, "&#39;")}' style="width:100%;height:calc(100vh - 52px);border:none;"></iframe>
+        `;
+        document.body.appendChild(overlay);
+        
+        // Store the HTML for sharing
+        window._lastReportHtml = html;
+    } else {
+        // For desktop/Android: just download the file
+        const date = new Date().toISOString().split('T')[0];
+        downloadFile(html, `reporte_${currentUser.name}_${date}.html`, 'text/html');
+    }
+    
+    toast('Reporte generado 📄');
 }
 
 function downloadFile(content, filename, type) {
@@ -1212,6 +1242,38 @@ function downloadFile(content, filename, type) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+// ===== Report Sharing (iOS) =====
+function shareReport() {
+    if (!window._lastReportHtml) {
+        toast('No hay reporte para compartir');
+        return;
+    }
+    
+    const blob = new Blob([window._lastReportHtml], { type: 'text/html' });
+    const date = new Date().toISOString().split('T')[0];
+    const file = new File([blob], `reporte_${currentUser.name}_${date}.html`, { type: 'text/html' });
+    
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({
+            title: `Reporte QuincenaApp - ${currentUser.name}`,
+            files: [file]
+        }).catch(() => {
+            // User cancelled share, that's ok
+        });
+    } else {
+        // Fallback: download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('Archivo descargado 📄');
+    }
 }
 
 // ===== Backup & Restore =====
