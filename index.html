@@ -102,6 +102,10 @@
                 <div class="balance-bar-fill" id="balance-bar-fill"></div>
             </div>
             <div class="balance-detail" id="balance-detail"></div>
+            <div class="balance-register-income" id="balance-register-income" style="display:none;">
+                <span>Aún no has registrado tu ingreso</span>
+                <button class="btn-register-income" id="btn-register-income">＋ Registrar ingreso</button>
+            </div>
         </section>
 
         <!-- Quincena Setup (if no active quincena) -->
@@ -109,7 +113,7 @@
             <div class="empty-state">
                 <span class="empty-icon">📅</span>
                 <h3>No hay quincena activa</h3>
-                <p>Registra tu ingreso para comenzar</p>
+                <p>Abrí una quincena para empezar a planificar</p>
                 <button class="btn btn-primary" id="btn-new-quincena">Nueva Quincena</button>
             </div>
         </section>
@@ -125,6 +129,16 @@
 
             <!-- Debts Tab -->
             <div class="tab-content active" id="tab-debts">
+                <!-- Locked state (shown when no income registered) -->
+                <div class="tab-locked" id="debts-locked" style="display:none;">
+                    <span class="empty-icon">🔒</span>
+                    <h3>Deudas bloqueadas</h3>
+                    <p>Registrá el monto que recibiste esta quincena para poder gestionar los pagos de tus deudas y ver tu balance.</p>
+                    <button class="btn btn-primary" id="btn-register-income-debts">＋ Registrar ingreso</button>
+                </div>
+
+                <!-- Debt content wrapper -->
+                <div id="debts-content">
                 <!-- Debt Summary Panel -->
                 <div class="debt-summary" id="debt-summary" style="display:none;">
                     <div class="debt-summary-grid">
@@ -157,6 +171,7 @@
                     <span class="empty-icon">✅</span>
                     <p>No hay deudas registradas</p>
                 </div>
+                </div><!-- /debts-content -->
             </div>
 
             <!-- Expenses Tab (Shopping List) -->
@@ -212,16 +227,41 @@
                     <input type="date" id="input-quincena-date">
                 </div>
                 <div class="form-group">
-                    <label for="input-quincena-income">Monto de ingreso</label>
+                    <label for="input-quincena-income">Monto de ingreso <span class="label-optional">(opcional)</span></label>
                     <div class="input-prefix">
                         <span>₡</span>
                         <input type="number" id="input-quincena-income" placeholder="0" min="0" step="100">
                     </div>
+                    <p class="form-hint">💡 Podés dejarlo en blanco y empezar tu lista de compras. Las deudas y el balance se activan cuando registrés el monto recibido.</p>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary modal-close-generic">Cancelar</button>
                 <button class="btn btn-primary" id="btn-save-quincena">Comenzar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Register Income (salary) for existing quincena -->
+    <div id="modal-register-income" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Registrar Ingreso</h2>
+                <button class="modal-close modal-close-generic">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="input-register-income">Monto que recibiste esta quincena</label>
+                    <div class="input-prefix">
+                        <span>₡</span>
+                        <input type="number" id="input-register-income" placeholder="0" min="0" step="100">
+                    </div>
+                    <p class="form-hint">Esto activará la gestión de deudas y tu balance disponible.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-generic">Cancelar</button>
+                <button class="btn btn-primary" id="btn-save-register-income">Guardar</button>
             </div>
         </div>
     </div>

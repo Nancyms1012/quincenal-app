@@ -67,6 +67,12 @@ function setupEventListeners() {
     $('#btn-save-quincena').addEventListener('click', saveQuincena);
     $('#btn-close-quincena').addEventListener('click', closeQuincena);
 
+    // Register income (for quincena opened without one)
+    $('#btn-register-income').addEventListener('click', () => openModal('modal-register-income'));
+    $('#btn-register-income-debts').addEventListener('click', () => openModal('modal-register-income'));
+    $('#btn-save-register-income').addEventListener('click', registerQuincenaIncome);
+    $('#input-register-income').addEventListener('keypress', (e) => { if (e.key === 'Enter') registerQuincenaIncome(); });
+
     // Debts
     $('#btn-add-debt').addEventListener('click', () => { editingDebtId = null; openDebtModal(); });
     $('#btn-save-debt').addEventListener('click', saveDebt);
@@ -194,16 +200,39 @@ function showAppScreen() {
         $('#setup-quincena').style.display = 'none';
         $('#main-content').style.display = 'block';
         $('#btn-close-quincena').style.display = 'block';
+
+        const incomeRegistered = isIncomeRegistered(activeQuincena);
+
+        // Toggle debts lock based on income
+        $('#debts-locked').style.display = incomeRegistered ? 'none' : 'block';
+        $('#debts-content').style.display = incomeRegistered ? 'block' : 'none';
+
+        // Toggle register-income banner in balance card
+        $('#balance-register-income').style.display = incomeRegistered ? 'none' : 'flex';
+
         renderDebts();
         renderExpenses();
         renderIncomes();
         updateBalance();
+
+        // If income not registered, default to the Compras tab (debts are locked)
+        if (!incomeRegistered) {
+            switchTab('expenses');
+        }
     } else {
         $('#setup-quincena').style.display = 'block';
         $('#main-content').style.display = 'none';
         $('#btn-close-quincena').style.display = 'none';
         updateBalanceEmpty();
     }
+}
+
+// Helper: whether a quincena has its income registered
+function isIncomeRegistered(q) {
+    // Backward compatible: older quincenas have income > 0 and no flag
+    if (q.incomeRegistered === true) return true;
+    if (q.incomeRegistered === false) return false;
+    return q.income > 0;
 }
 
 function goBackToUsers() {
@@ -219,12 +248,15 @@ function saveQuincena() {
     const income = parseFloat($('#input-quincena-income').value) || 0;
 
     if (!dateVal) { toast('Selecciona una fecha'); return; }
-    if (income <= 0) { toast('Ingresa un monto válido'); return; }
+    // Income is optional now — can be registered later
+
+    const hasIncome = income > 0;
 
     const quincena = {
         id: generateId(),
         date: dateVal,
         income: income,
+        incomeRegistered: hasIncome,
         additionalIncomes: [],
         debts: [],
         expenses: [],
@@ -233,20 +265,10 @@ function saveQuincena() {
         createdAt: new Date().toISOString()
     };
 
-    // Copy existing debts with their current balances (auto-carry forward)
-    currentUser.debts.forEach(debt => {
-        if (debt.remainingBalance > 0) {
-            quincena.debts.push({
-                debtId: debt.id,
-                name: debt.name,
-                totalDebt: debt.remainingBalance,
-                amountThisQuincena: Math.min(debt.amountPerQuincena, debt.remainingBalance),
-                paid: false,
-                paidAmount: 0,
-                receipt: null
-            });
-        }
-    });
+    // Only carry forward debts if income is registered (otherwise defer until it is)
+    if (hasIncome) {
+        carryForwardDebts(quincena);
+    }
 
     currentUser.quincenas.push(quincena);
     saveData(appData);
@@ -258,7 +280,52 @@ function saveQuincena() {
     closeModal('modal-quincena');
 
     showAppScreen();
-    toast('¡Quincena iniciada! 🚀');
+    toast(hasIncome ? '¡Quincena iniciada! 🚀' : '¡Quincena abierta! Ya podés planificar tus compras 🛒');
+}
+
+// Helper: carry forward pending debts into a quincena
+function carryForwardDebts(quincena) {
+    currentUser.debts.forEach(debt => {
+        if (debt.remainingBalance > 0) {
+            // Avoid duplicates if already carried
+            if (quincena.debts.some(d => d.debtId === debt.id)) return;
+            quincena.debts.push({
+                debtId: debt.id,
+                name: debt.name,
+                totalDebt: debt.remainingBalance,
+                amountThisQuincena: Math.min(debt.amountPerQuincena, debt.remainingBalance),
+                paid: false,
+                paidAmount: 0,
+                receipt: null
+            });
+        }
+    });
+}
+
+// Edit the salary of the active quincena (reuses register-income modal)
+function editSalaryIncome() {
+    if (!activeQuincena) return;
+    $('#input-register-income').value = activeQuincena.income || '';
+    openModal('modal-register-income');
+}
+
+// Register income for an existing quincena that was opened without one
+function registerQuincenaIncome() {
+    const income = parseFloat($('#input-register-income').value) || 0;
+    if (income <= 0) { toast('Ingresa un monto válido'); return; }
+    if (!activeQuincena) return;
+
+    activeQuincena.income = income;
+    activeQuincena.incomeRegistered = true;
+
+    // Now that income exists, carry forward any pending debts
+    carryForwardDebts(activeQuincena);
+
+    saveData(appData);
+    $('#input-register-income').value = '';
+    closeModal('modal-register-income');
+    showAppScreen();
+    toast('Ingreso registrado ✅ ¡Deudas y balance activados!');
 }
 
 function closeQuincena() {
@@ -317,30 +384,42 @@ function updateBalance() {
 
     const totalSpent = totalDebtsPaid + totalExpenses;
     const remaining = totalIncome - totalSpent;
-
-    $('#balance-income').textContent = formatMoney(totalIncome);
-    $('#balance-spent').textContent = formatMoney(totalSpent);
-    $('#balance-remaining').textContent = formatMoney(remaining);
-    $('#balance-remaining').className = 'balance-amount' + (remaining < 0 ? ' text-danger' : '');
-
-    // Update bar
-    const percent = Math.min(100, Math.max(0, (totalSpent / totalIncome) * 100));
-    $('#balance-bar-fill').style.width = percent + '%';
-
-    // Visual feedback for negative balance
+    const incomeRegistered = isIncomeRegistered(activeQuincena);
     const balanceCard = document.querySelector('.balance-card');
-    if (remaining < 0) {
-        balanceCard.classList.add('negative');
-    } else {
-        balanceCard.classList.remove('negative');
-    }
 
-    // Balance detail breakdown
-    let detailHtml = `<span class="balance-detail-tag">💼 Salario: ${formatMoney(baseIncome)}</span>`;
-    if (totalAdditionalIncome > 0) {
-        detailHtml += `<span class="balance-detail-tag">💵 Adicional: +${formatMoney(totalAdditionalIncome)}</span>`;
+    $('#balance-spent').textContent = formatMoney(totalSpent);
+
+    if (!incomeRegistered) {
+        // No income yet: show spent only, hide income/remaining values
+        $('#balance-income').textContent = '—';
+        $('#balance-remaining').textContent = '—';
+        $('#balance-remaining').className = 'balance-amount';
+        $('#balance-bar-fill').style.width = '0%';
+        balanceCard.classList.remove('negative');
+        $('#balance-detail').innerHTML = '';
+    } else {
+        $('#balance-income').textContent = formatMoney(totalIncome);
+        $('#balance-remaining').textContent = formatMoney(remaining);
+        $('#balance-remaining').className = 'balance-amount' + (remaining < 0 ? ' text-danger' : '');
+
+        // Update bar
+        const percent = Math.min(100, Math.max(0, (totalSpent / totalIncome) * 100));
+        $('#balance-bar-fill').style.width = percent + '%';
+
+        // Visual feedback for negative balance
+        if (remaining < 0) {
+            balanceCard.classList.add('negative');
+        } else {
+            balanceCard.classList.remove('negative');
+        }
+
+        // Balance detail breakdown
+        let detailHtml = `<span class="balance-detail-tag">💼 Salario: ${formatMoney(baseIncome)}</span>`;
+        if (totalAdditionalIncome > 0) {
+            detailHtml += `<span class="balance-detail-tag">💵 Adicional: +${formatMoney(totalAdditionalIncome)}</span>`;
+        }
+        $('#balance-detail').innerHTML = detailHtml;
     }
-    $('#balance-detail').innerHTML = detailHtml;
 
     // Update quincena label
     const date = new Date(activeQuincena.date + 'T12:00:00');
@@ -831,20 +910,40 @@ function renderIncomes() {
 
     if (!activeQuincena) return;
 
-    // Build list including salary as first item
-    let html = `
-        <div class="income-card salary">
-            <div class="income-card-left">
-                <div>
-                    <div class="income-card-name">💼 Salario quincenal</div>
-                    <div class="income-card-note">Ingreso base</div>
+    const incomeRegistered = isIncomeRegistered(activeQuincena);
+
+    // Build list including salary as first item (or a prompt if not registered)
+    let html;
+    if (incomeRegistered) {
+        html = `
+            <div class="income-card salary">
+                <div class="income-card-left">
+                    <div>
+                        <div class="income-card-name">💼 Salario quincenal</div>
+                        <div class="income-card-note">Ingreso base</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;">
+                    <span class="income-card-amount">${formatMoney(activeQuincena.income)}</span>
+                    <button class="income-card-delete" onclick="editSalaryIncome()" title="Editar" style="background:var(--primary-bg);color:var(--primary);">✏️</button>
                 </div>
             </div>
-            <div style="display:flex;align-items:center;">
-                <span class="income-card-amount">${formatMoney(activeQuincena.income)}</span>
+        `;
+    } else {
+        html = `
+            <div class="income-card salary" style="border-left-color:var(--gray-300);">
+                <div class="income-card-left">
+                    <div>
+                        <div class="income-card-name">💼 Salario quincenal</div>
+                        <div class="income-card-note">Aún no registrado</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;">
+                    <button class="btn btn-sm btn-primary" onclick="openModal('modal-register-income')">＋ Registrar</button>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    }
 
     const additionalIncomes = activeQuincena.additionalIncomes || [];
     
