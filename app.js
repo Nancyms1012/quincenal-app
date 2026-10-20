@@ -270,6 +270,9 @@ function saveQuincena() {
         carryForwardDebts(quincena);
     }
 
+    // Carry forward unpurchased shopping items from the most recent quincena
+    carryForwardExpenses(quincena);
+
     currentUser.quincenas.push(quincena);
     saveData(appData);
     activeQuincena = quincena;
@@ -297,6 +300,26 @@ function carryForwardDebts(quincena) {
                 paid: false,
                 paidAmount: 0,
                 receipt: null
+            });
+        }
+    });
+}
+
+// Helper: carry forward unpurchased shopping-list items from the latest quincena
+function carryForwardExpenses(newQuincena) {
+    // Find the most recent quincena before this one (the last in the list)
+    const previous = currentUser.quincenas[currentUser.quincenas.length - 1];
+    if (!previous || !previous.expenses) return;
+
+    previous.expenses.forEach(exp => {
+        if (!exp.purchased) {
+            newQuincena.expenses.push({
+                id: generateId(),
+                name: exp.name,
+                amount: exp.amount,
+                purchased: false,
+                carriedOver: true,
+                date: new Date().toISOString()
             });
         }
     });
@@ -427,6 +450,9 @@ function updateBalance() {
     const label = day <= 15 ? '1ra Quincena' : '2da Quincena';
     const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     $('#quincena-label').textContent = `${label} - ${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+
+    // Keep the affordability indicator in sync with debt/income changes
+    renderAffordability();
 }
 
 function updateBalanceEmpty() {
@@ -821,10 +847,19 @@ function renderExpenses() {
     const empty = $('#empty-expenses');
     const summary = $('#expense-summary');
 
-    if (!activeQuincena || activeQuincena.expenses.length === 0) {
+    const hasExpenses = activeQuincena && activeQuincena.expenses.length > 0;
+
+    if (!hasExpenses) {
         list.innerHTML = '';
         empty.style.display = 'block';
-        summary.style.display = 'none';
+        // Still show the summary box if there's an affordability message worth showing
+        $('#expense-summary-text').textContent = '';
+        summary.style.display = 'block';
+        renderAffordability();
+        // Hide whole summary box if affordability has nothing to show
+        if ($('#affordability').style.display === 'none') {
+            summary.style.display = 'none';
+        }
         return;
     }
 
@@ -838,6 +873,8 @@ function renderExpenses() {
     
     summary.style.display = 'block';
     $('#expense-summary-text').textContent = `${purchasedItems.length}/${totalItems} comprado${purchasedItems.length !== 1 ? 's' : ''} — Planificado: ${formatMoney(totalPlanned)} | Gastado: ${formatMoney(totalPurchased)}`;
+
+    renderAffordability();
 
     // Sort: unchecked first, checked last
     const sorted = [...activeQuincena.expenses].sort((a, b) => {
@@ -854,7 +891,7 @@ function renderExpenses() {
                 <div class="expense-card-left">
                     <input type="checkbox" class="expense-checkbox" ${isChecked} onchange="toggleExpensePurchased('${expense.id}')">
                     <div>
-                        <div class="expense-card-name ${expense.purchased ? 'checked' : ''}">${escapeHtml(expense.name)}</div>
+                        <div class="expense-card-name ${expense.purchased ? 'checked' : ''}">${escapeHtml(expense.name)}${expense.carriedOver ? ' <span class="carried-tag">↩ arrastrada</span>' : ''}</div>
                         <div class="expense-card-date">${dateStr}</div>
                     </div>
                 </div>
@@ -865,6 +902,60 @@ function renderExpenses() {
             </div>
         `;
     }).join('');
+}
+
+// Shows whether the available money covers remaining commitments
+// (pending shopping items + pending debts), updates in real time
+function renderAffordability() {
+    const el = $('#affordability');
+    if (!activeQuincena) { el.style.display = 'none'; return; }
+
+    // If income is not registered yet, we can't tell if it "alcanza"
+    if (!isIncomeRegistered(activeQuincena)) {
+        el.style.display = 'block';
+        el.className = 'affordability neutral';
+        el.innerHTML = `ℹ️ Registrá tu ingreso para ver si te alcanza`;
+        return;
+    }
+
+    // Total money available this quincena
+    const baseIncome = activeQuincena.income;
+    const totalAdditionalIncome = (activeQuincena.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
+    const totalIncome = baseIncome + totalAdditionalIncome;
+
+    // Already spent (purchased items + paid debts)
+    const spentPurchased = activeQuincena.expenses.filter(e => e.purchased).reduce((sum, e) => sum + e.amount, 0);
+    const paidDebts = activeQuincena.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0);
+
+    // Pending commitments (not yet checked / not yet paid)
+    const pendingPurchases = activeQuincena.expenses.filter(e => !e.purchased).reduce((sum, e) => sum + e.amount, 0);
+    const pendingDebts = activeQuincena.debts.reduce((sum, d) => {
+        if (d.paid) return sum;
+        return sum + d.amountThisQuincena;
+    }, 0);
+
+    // Money left after what's already spent
+    const available = totalIncome - spentPurchased - paidDebts;
+    // What's left after covering all pending commitments
+    const leftover = available - pendingPurchases - pendingDebts;
+
+    el.style.display = 'block';
+
+    const pendingParts = [];
+    if (pendingPurchases > 0) pendingParts.push(`compras ${formatMoney(pendingPurchases)}`);
+    if (pendingDebts > 0) pendingParts.push(`deudas ${formatMoney(pendingDebts)}`);
+    const pendingLabel = pendingParts.length ? ` (pendiente: ${pendingParts.join(' + ')})` : '';
+
+    if (pendingPurchases === 0 && pendingDebts === 0) {
+        el.className = 'affordability ok';
+        el.innerHTML = `✅ Todo cubierto — te queda <strong>${formatMoney(available)}</strong>`;
+    } else if (leftover >= 0) {
+        el.className = 'affordability ok';
+        el.innerHTML = `✅ Te alcanza${pendingLabel}. Sobraría <strong>${formatMoney(leftover)}</strong>`;
+    } else {
+        el.className = 'affordability warn';
+        el.innerHTML = `⚠️ No alcanza${pendingLabel}. Te faltan <strong>${formatMoney(Math.abs(leftover))}</strong>`;
+    }
 }
 
 // ===== Additional Incomes =====
