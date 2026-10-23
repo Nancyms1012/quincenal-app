@@ -235,6 +235,25 @@ function isIncomeRegistered(q) {
     return q.income > 0;
 }
 
+// Helper: carried-over balance from a previous quincena (positive only)
+function getCarriedBalance(q) {
+    return q && q.carriedBalance > 0 ? q.carriedBalance : 0;
+}
+
+// Helper: compute the remaining (available) balance of a quincena
+// = base income + additional incomes + carried balance − spent − debts paid
+function computeRemaining(q) {
+    const baseIncome = q.income || 0;
+    const additional = (q.additionalIncomes || []).reduce((s, i) => s + i.amount, 0);
+    const carried = getCarriedBalance(q);
+    const totalIncome = baseIncome + additional + carried;
+
+    const debtsPaid = (q.debts || []).reduce((s, d) => s + (d.paid ? d.paidAmount : 0), 0);
+    const spent = (q.expenses || []).reduce((s, e) => s + (e.purchased ? e.amount : 0), 0);
+
+    return totalIncome - debtsPaid - spent;
+}
+
 function goBackToUsers() {
     appScreen.classList.remove('active');
     userScreen.classList.add('active');
@@ -252,11 +271,16 @@ function saveQuincena() {
 
     const hasIncome = income > 0;
 
+    // Carry over the leftover balance from the most recent quincena
+    const previous = currentUser.quincenas[currentUser.quincenas.length - 1];
+    const carriedBalance = previous && previous.leftoverBalance > 0 ? previous.leftoverBalance : 0;
+
     const quincena = {
         id: generateId(),
         date: dateVal,
         income: income,
         incomeRegistered: hasIncome,
+        carriedBalance: carriedBalance,
         additionalIncomes: [],
         debts: [],
         expenses: [],
@@ -283,7 +307,11 @@ function saveQuincena() {
     closeModal('modal-quincena');
 
     showAppScreen();
-    toast(hasIncome ? '¡Quincena iniciada! 🚀' : '¡Quincena abierta! Ya podés planificar tus compras 🛒');
+    if (carriedBalance > 0) {
+        toast(`¡Quincena abierta! Traés un saldo de ${formatMoney(carriedBalance)} ↩`);
+    } else {
+        toast(hasIncome ? '¡Quincena iniciada! 🚀' : '¡Quincena abierta! Ya podés planificar tus compras 🛒');
+    }
 }
 
 // Helper: carry forward pending debts into a quincena
@@ -368,10 +396,14 @@ function closeQuincena() {
         }
     });
 
+    // Save the leftover (positive) balance so it can carry to the next quincena
+    activeQuincena.leftoverBalance = Math.max(0, computeRemaining(activeQuincena));
+
     saveData(appData);
     activeQuincena = null;
     showAppScreen();
-    toast('Quincena cerrada ✅');
+    const leftover = (currentUser.quincenas[currentUser.quincenas.length - 1] || {}).leftoverBalance || 0;
+    toast(leftover > 0 ? `Quincena cerrada ✅ Saldo de ${formatMoney(leftover)} pasa a la próxima` : 'Quincena cerrada ✅');
 
     // Suggest backup after closing
     setTimeout(() => {
@@ -391,8 +423,9 @@ function updateBalance() {
     (activeQuincena.additionalIncomes || []).forEach(inc => {
         totalAdditionalIncome += inc.amount;
     });
-    
-    const totalIncome = baseIncome + totalAdditionalIncome;
+
+    const carriedBalance = getCarriedBalance(activeQuincena);
+    const totalIncome = baseIncome + totalAdditionalIncome + carriedBalance;
     
     // Calculate total spent (paid debts + purchased expenses only)
     let totalDebtsPaid = 0;
@@ -419,7 +452,10 @@ function updateBalance() {
         $('#balance-remaining').className = 'balance-amount';
         $('#balance-bar-fill').style.width = '0%';
         balanceCard.classList.remove('negative');
-        $('#balance-detail').innerHTML = '';
+        // Still show carried balance if any, as a hint
+        $('#balance-detail').innerHTML = carriedBalance > 0
+            ? `<span class="balance-detail-tag">↩ Saldo anterior: +${formatMoney(carriedBalance)}</span>`
+            : '';
     } else {
         $('#balance-income').textContent = formatMoney(totalIncome);
         $('#balance-remaining').textContent = formatMoney(remaining);
@@ -440,6 +476,9 @@ function updateBalance() {
         let detailHtml = `<span class="balance-detail-tag">💼 Salario: ${formatMoney(baseIncome)}</span>`;
         if (totalAdditionalIncome > 0) {
             detailHtml += `<span class="balance-detail-tag">💵 Adicional: +${formatMoney(totalAdditionalIncome)}</span>`;
+        }
+        if (carriedBalance > 0) {
+            detailHtml += `<span class="balance-detail-tag">↩ Saldo anterior: +${formatMoney(carriedBalance)}</span>`;
         }
         $('#balance-detail').innerHTML = detailHtml;
     }
@@ -584,7 +623,7 @@ function renderDebtSummary() {
     const alertEl = $('#debt-summary-alert');
     const baseIncome = activeQuincena.income;
     const totalAdditionalIncome = (activeQuincena.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
-    const totalIncome = baseIncome + totalAdditionalIncome;
+    const totalIncome = baseIncome + totalAdditionalIncome + getCarriedBalance(activeQuincena);
     const totalExpensesPurchased = activeQuincena.expenses.filter(e => e.purchased).reduce((sum, e) => sum + e.amount, 0);
     const availableAfterExpenses = totalIncome - totalPaid - totalExpensesPurchased;
 
@@ -921,7 +960,7 @@ function renderAffordability() {
     // Total money available this quincena
     const baseIncome = activeQuincena.income;
     const totalAdditionalIncome = (activeQuincena.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
-    const totalIncome = baseIncome + totalAdditionalIncome;
+    const totalIncome = baseIncome + totalAdditionalIncome + getCarriedBalance(activeQuincena);
 
     // Already spent (purchased items + paid debts)
     const spentPurchased = activeQuincena.expenses.filter(e => e.purchased).reduce((sum, e) => sum + e.amount, 0);
@@ -1036,6 +1075,24 @@ function renderIncomes() {
         `;
     }
 
+    // Carried-over balance from previous quincena (shown as an income)
+    const carriedBalance = getCarriedBalance(activeQuincena);
+    if (carriedBalance > 0) {
+        html += `
+            <div class="income-card">
+                <div class="income-card-left">
+                    <div>
+                        <div class="income-card-name">↩ Saldo de quincena anterior</div>
+                        <div class="income-card-note">Lo que te sobró</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;">
+                    <span class="income-card-amount">+${formatMoney(carriedBalance)}</span>
+                </div>
+            </div>
+        `;
+    }
+
     const additionalIncomes = activeQuincena.additionalIncomes || [];
     
     if (additionalIncomes.length === 0) {
@@ -1099,7 +1156,7 @@ function renderHistory() {
         const totalSpent = q.debts.reduce((sum, d) => sum + (d.paid ? d.paidAmount : 0), 0) +
                           q.expenses.filter(e => e.purchased !== false).reduce((sum, e) => sum + e.amount, 0);
         const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
-        const totalIncome = q.income + totalAdditional;
+        const totalIncome = q.income + totalAdditional + getCarriedBalance(q);
 
         return `
             <div class="history-item" onclick="viewHistoryDetail('${q.id}')">
@@ -1128,7 +1185,8 @@ function viewHistoryDetail(quincenaId) {
     const totalExpenses = q.expenses.filter(e => e.purchased !== false).reduce((sum, e) => sum + e.amount, 0);
     const totalSpent = totalDebtsPaid + totalExpenses;
     const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
-    const totalIncome = q.income + totalAdditional;
+    const carriedBalance = getCarriedBalance(q);
+    const totalIncome = q.income + totalAdditional + carriedBalance;
 
     let html = `
         <div class="detail-section">
@@ -1150,9 +1208,12 @@ function viewHistoryDetail(quincenaId) {
     `;
 
     // Show income breakdown
-    if (totalAdditional > 0) {
+    if (totalAdditional > 0 || carriedBalance > 0) {
         html += `<div class="detail-section"><h4>💵 Ingresos</h4>`;
         html += `<div class="detail-list-item"><span class="name">💼 Salario</span><span class="amount">${formatMoney(q.income)}</span></div>`;
+        if (carriedBalance > 0) {
+            html += `<div class="detail-list-item"><span class="name">↩ Saldo anterior</span><span class="amount text-success">+${formatMoney(carriedBalance)}</span></div>`;
+        }
         (q.additionalIncomes || []).forEach(inc => {
             html += `<div class="detail-list-item"><span class="name">${escapeHtml(inc.note)}</span><span class="amount text-success">+${formatMoney(inc.amount)}</span></div>`;
         });
@@ -1315,7 +1376,8 @@ function exportPDF(quincenas) {
         const totalExpenses = q.expenses.filter(e => e.purchased !== false).reduce((sum, e) => sum + e.amount, 0);
         const totalSpent = totalDebtsPaid + totalExpenses;
         const totalAdditional = (q.additionalIncomes || []).reduce((sum, i) => sum + i.amount, 0);
-        const totalIncome = q.income + totalAdditional;
+        const carriedBalance = getCarriedBalance(q);
+        const totalIncome = q.income + totalAdditional + carriedBalance;
 
         html += `
             <h2>${label} - ${monthNames[date.getMonth()]} ${date.getFullYear()}</h2>
@@ -1335,9 +1397,12 @@ function exportPDF(quincenas) {
             </div>
         `;
 
-        if (totalAdditional > 0) {
+        if (totalAdditional > 0 || carriedBalance > 0) {
             html += `<h3>💵 Detalle de Ingresos</h3><table><tr><th>Concepto</th><th>Monto</th></tr>`;
             html += `<tr><td>💼 Salario quincenal</td><td>${formatMoney(q.income)}</td></tr>`;
+            if (carriedBalance > 0) {
+                html += `<tr><td>↩ Saldo de quincena anterior</td><td>${formatMoney(carriedBalance)}</td></tr>`;
+            }
             (q.additionalIncomes || []).forEach(inc => {
                 html += `<tr><td>${escapeHtml(inc.note)}</td><td>${formatMoney(inc.amount)}</td></tr>`;
             });
